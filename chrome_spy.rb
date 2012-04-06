@@ -5,10 +5,29 @@ require 'rubygems'
 require 'sqlite3'
 require 'active_record'
 
+possible_databases = %w(~/Library/Application\ Support/Chromium/Default/History ~/Library/Application\ Support/Google/Chrome/Default/History)
+
+databases = possible_databases.map do |database|
+  File.expand_path( database ) if File.exists?( File.expand_path( database ) )
+end
+
 ActiveRecord::Base.establish_connection({
   :adapter => "sqlite3",
-  :database => File.expand_path("~/Library/Application Support/Chromium/Default/History")
+  :database => databases.first
 })
+
+ActiveRecord::ConnectionAdapters::AbstractAdapter.class_eval do
+  
+  attr_reader :last_query
+
+  def log_with_last_query(sql, name, binds=[], &block)
+    @last_query = [sql, name]
+    log_without_last_query(sql, name, binds, &block)
+  end
+  alias_method_chain :log, :last_query
+  
+end
+
 
 # If you'd like to see the entire schema...
 # puts ActiveRecord::SchemaDumper.dump
@@ -124,5 +143,11 @@ class ChromeSpy
       Download.limit(5).all.each { |d| puts "bytes: #{d.total_bytes} path: #{d.full_path}" }
       nil
     end
+    
+    def history_before (timestamp)
+      Url.find(:all, :conditions => [ "last_visit_time != 0 AND hidden != 1", timestamp], :limit => 100).each { |u| puts u.inspect }
+      nil
+    end
+    
   end
 end
